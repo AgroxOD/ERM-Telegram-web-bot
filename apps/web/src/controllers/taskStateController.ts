@@ -20,6 +20,7 @@ export interface TaskIndexMeta {
   pageSize?: number;
   total?: number;
   sort?: "asc" | "desc";
+  page?: number;
   updatedAt: number;
 }
 
@@ -135,6 +136,16 @@ const applyLimit = (ids: string[], meta: TaskIndexMeta | undefined): string[] =>
   return ids.slice(0, limit);
 };
 
+const extractPage = (key: string, candidate?: number): number | undefined => {
+  if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    return candidate;
+  }
+  const match = key.match(/page=(\d+)/);
+  if (!match) return undefined;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 export class TaskStateController {
   private tasks = new Map<string, TaskRow>();
   private indexes = new Map<string, string[]>();
@@ -179,6 +190,7 @@ export class TaskStateController {
     const userId = meta?.userId;
     const sort = meta?.sort ?? "desc";
     const total = meta?.total ?? ids.length;
+    const page = extractPage(key, meta?.page);
     this.meta.set(key, {
       key,
       pageSize,
@@ -187,6 +199,7 @@ export class TaskStateController {
       userId,
       sort,
       total,
+      page,
       updatedAt: Date.now(),
     });
     this.notify();
@@ -204,6 +217,10 @@ export class TaskStateController {
       const has = ids.includes(normalized.id);
       const matches = matchesIndex(meta, next);
       if (matches && !has) {
+        const allowInsert = !meta || !meta.page || meta.page <= 1;
+        if (!allowInsert) {
+          return;
+        }
         const sorted = meta?.sort === "asc" ? [...ids, normalized.id] : [normalized.id, ...ids];
         const limited = applyLimit(sorted, meta);
         this.indexes.set(key, limited);
